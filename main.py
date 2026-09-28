@@ -4,28 +4,28 @@ import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, ChatPermissions
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+
 from dotenv import load_dotenv
 
+
 # =========================================================
-# LOAD ENV
+# LOAD ENVIRONMENT
 # =========================================================
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
-# ID GRUP TELEGRAM
-GROUP_ID = int(os.getenv("GROUP_ID", "-5452358482"))
+GROUP_ID = int(
+    os.getenv("GROUP_ID", "-1003949834371").strip()
+)
 
-# Admin Telegram ID
-# Bisa satu ID atau beberapa ID dipisahkan koma
-# Contoh:
-# ADMIN_IDS=123456789,987654321
 ADMIN_IDS = {
     int(x.strip())
     for x in os.getenv("ADMIN_IDS", "").split(",")
@@ -48,7 +48,7 @@ logger = logging.getLogger("group_scheduler")
 
 
 # =========================================================
-# BOT / DISPATCHER
+# BOT
 # =========================================================
 
 bot = Bot(token=BOT_TOKEN)
@@ -60,14 +60,45 @@ scheduler = AsyncIOScheduler(
 
 
 # =========================================================
-# STATUS
+# STATUS INTERNAL
 # =========================================================
 
 group_is_open = None
 
 
 # =========================================================
-# CEK ADMIN
+# PERMISSION
+# =========================================================
+
+OPEN_PERMISSIONS = ChatPermissions(
+    can_send_messages=True,
+    can_send_audios=True,
+    can_send_documents=True,
+    can_send_photos=True,
+    can_send_videos=True,
+    can_send_video_notes=True,
+    can_send_voice_notes=True,
+    can_send_polls=True,
+    can_send_other_messages=True,
+    can_add_web_page_previews=True,
+)
+
+CLOSED_PERMISSIONS = ChatPermissions(
+    can_send_messages=False,
+    can_send_audios=False,
+    can_send_documents=False,
+    can_send_photos=False,
+    can_send_videos=False,
+    can_send_video_notes=False,
+    can_send_voice_notes=False,
+    can_send_polls=False,
+    can_send_other_messages=False,
+    can_add_web_page_previews=False,
+)
+
+
+# =========================================================
+# ADMIN CHECK
 # =========================================================
 
 def is_admin(user_id: int) -> bool:
@@ -75,48 +106,45 @@ def is_admin(user_id: int) -> bool:
 
 
 async def admin_only(message: Message) -> bool:
+
     if message.from_user is None:
         return False
 
     if not is_admin(message.from_user.id):
+
         await message.answer(
             "⛔ Kamu tidak memiliki izin untuk menggunakan command ini."
         )
+
         return False
 
     return True
 
 
 # =========================================================
-# BUKA DISKUSI
+# OPEN DISCUSSION
 # =========================================================
 
 async def open_discussion(send_message=True):
+
     global group_is_open
 
     try:
-        # Semua member boleh mengirim pesan
+
         await bot.set_chat_permissions(
             chat_id=GROUP_ID,
-            permissions={
-                "can_send_messages": True,
-                "can_send_audios": True,
-                "can_send_documents": True,
-                "can_send_photos": True,
-                "can_send_videos": True,
-                "can_send_video_notes": True,
-                "can_send_voice_notes": True,
-                "can_send_polls": True,
-                "can_send_other_messages": True,
-                "can_add_web_page_previews": True,
-            }
+            permissions=OPEN_PERMISSIONS
         )
 
         group_is_open = True
 
-        logger.info("🟢 DISKUSI DIBUKA")
+        logger.info(
+            "🟢 DISKUSI DIBUKA | GROUP_ID=%s",
+            GROUP_ID
+        )
 
         if send_message:
+
             await bot.send_message(
                 GROUP_ID,
                 """🟢 **DISKUSI TELAH DIBUKA**
@@ -136,39 +164,37 @@ Tetap jaga komunikasi yang baik, hindari spam, dan yang paling penting:
             )
 
     except Exception as e:
-        logger.exception(f"Gagal membuka diskusi: {e}")
+
+        logger.exception(
+            "❌ Gagal membuka diskusi: %s",
+            e
+        )
 
 
 # =========================================================
-# TUTUP DISKUSI
+# CLOSE DISCUSSION
 # =========================================================
 
 async def close_discussion(send_message=True):
+
     global group_is_open
 
     try:
-        # Member tidak boleh mengirim pesan
+
         await bot.set_chat_permissions(
             chat_id=GROUP_ID,
-            permissions={
-                "can_send_messages": False,
-                "can_send_audios": False,
-                "can_send_documents": False,
-                "can_send_photos": False,
-                "can_send_videos": False,
-                "can_send_video_notes": False,
-                "can_send_voice_notes": False,
-                "can_send_polls": False,
-                "can_send_other_messages": False,
-                "can_add_web_page_previews": False,
-            }
+            permissions=CLOSED_PERMISSIONS
         )
 
         group_is_open = False
 
-        logger.info("🔴 DISKUSI DITUTUP")
+        logger.info(
+            "🔴 DISKUSI DITUTUP | GROUP_ID=%s",
+            GROUP_ID
+        )
 
         if send_message:
+
             await bot.send_message(
                 GROUP_ID,
                 """🔴 **DISKUSI KITA TUTUP DULU SEMENTARA**
@@ -186,15 +212,21 @@ Tetap jaga **Money Management**, disiplin, dan jangan memaksakan entry.
             )
 
     except Exception as e:
-        logger.exception(f"Gagal menutup diskusi: {e}")
+
+        logger.exception(
+            "❌ Gagal menutup diskusi: %s",
+            e
+        )
 
 
 # =========================================================
-# PENGUMUMAN 5 MENIT SEBELUM BUKA
+# REMINDER 5 MENIT SEBELUM BUKA
 # =========================================================
 
 async def opening_reminder():
+
     try:
+
         await bot.send_message(
             GROUP_ID,
             """🟡 **5 MENIT LAGI DISKUSI DIBUKA**
@@ -213,16 +245,107 @@ See you inside, teman-teman! 🚀""",
             parse_mode="Markdown"
         )
 
-        logger.info("🟡 Pengumuman 5 menit sebelum buka dikirim")
+        logger.info(
+            "🟡 Reminder 5 menit sebelum buka dikirim"
+        )
 
     except Exception as e:
+
         logger.exception(
-            f"Gagal mengirim pengumuman pembukaan: {e}"
+            "❌ Gagal mengirim reminder: %s",
+            e
         )
 
 
 # =========================================================
-# /BUKA
+# SYNC STATUS SAAT BOT STARTUP
+# =========================================================
+
+async def sync_group_status():
+
+    now = datetime.now(TIMEZONE)
+
+    weekday = now.weekday()
+
+    hour = now.hour
+    minute = now.minute
+
+    current_minutes = (
+        hour * 60
+    ) + minute
+
+    logger.info(
+        "🕐 Startup time: %s WIB",
+        now.strftime("%d-%m-%Y %H:%M:%S")
+    )
+
+    # =====================================================
+    # SENIN - JUMAT
+    # =====================================================
+
+    if weekday <= 4:
+
+        # -----------------------------------------------
+        # 18:00 - 23:59
+        # DISKUSI TERBUKA
+        # -----------------------------------------------
+
+        if current_minutes >= (18 * 60):
+
+            logger.info(
+                "🟢 Startup berada di jam diskusi."
+            )
+
+            await open_discussion(
+                send_message=False
+            )
+
+        # -----------------------------------------------
+        # 00:00 - 17:59
+        # DISKUSI TERTUTUP
+        # -----------------------------------------------
+
+        else:
+
+            logger.info(
+                "🔴 Startup berada di luar jam diskusi."
+            )
+
+            await close_discussion(
+                send_message=False
+            )
+
+    # =====================================================
+    # SABTU
+    # =====================================================
+
+    elif weekday == 5:
+
+        logger.info(
+            "🔴 Hari Sabtu - diskusi otomatis ditutup."
+        )
+
+        await close_discussion(
+            send_message=False
+        )
+
+    # =====================================================
+    # MINGGU
+    # =====================================================
+
+    else:
+
+        logger.info(
+            "🔴 Hari Minggu - diskusi otomatis ditutup."
+        )
+
+        await close_discussion(
+            send_message=False
+        )
+
+
+# =========================================================
+# COMMAND /BUKA
 # =========================================================
 
 @dp.message(Command("buka"))
@@ -231,17 +354,20 @@ async def command_buka(message: Message):
     if not await admin_only(message):
         return
 
-    await open_discussion(send_message=False)
+    await open_discussion(
+        send_message=False
+    )
 
     await message.answer(
-        "🟢 **DISKUSI BERHASIL DIBUKA**\n\n"
-        "Member sekarang dapat mengirim pesan.",
+        """🟢 **DISKUSI BERHASIL DIBUKA**
+
+Member sekarang dapat mengirim pesan.""",
         parse_mode="Markdown"
     )
 
 
 # =========================================================
-# /TUTUP
+# COMMAND /TUTUP
 # =========================================================
 
 @dp.message(Command("tutup"))
@@ -250,17 +376,20 @@ async def command_tutup(message: Message):
     if not await admin_only(message):
         return
 
-    await close_discussion(send_message=False)
+    await close_discussion(
+        send_message=False
+    )
 
     await message.answer(
-        "🔴 **DISKUSI BERHASIL DITUTUP**\n\n"
-        "Member sekarang tidak dapat mengirim pesan.",
+        """🔴 **DISKUSI BERHASIL DITUTUP**
+
+Member sekarang tidak dapat mengirim pesan.""",
         parse_mode="Markdown"
     )
 
 
 # =========================================================
-# /STATUS
+# COMMAND /STATUS
 # =========================================================
 
 @dp.message(Command("status"))
@@ -272,10 +401,15 @@ async def command_status(message: Message):
     now = datetime.now(TIMEZONE)
 
     if group_is_open is True:
+
         status = "🟢 DISKUSI TERBUKA"
+
     elif group_is_open is False:
+
         status = "🔴 DISKUSI TERTUTUP"
+
     else:
+
         status = "⚪ STATUS BELUM DIKETAHUI"
 
     await message.answer(
@@ -283,49 +417,61 @@ async def command_status(message: Message):
 
 {status}
 
-📅 Hari : {now.strftime("%A")}
-📆 Tanggal : {now.strftime("%d-%m-%Y")}
-⏰ Waktu : {now.strftime("%H:%M:%S")} WIB
+📅 Hari     : {now.strftime("%A")}
+📆 Tanggal  : {now.strftime("%d-%m-%Y")}
+⏰ Waktu    : {now.strftime("%H:%M:%S")} WIB
 
-🟢 Buka otomatis : **18:00 WIB**
-🔴 Tutup otomatis : **00:00 WIB**
 🟡 Reminder : **17:55 WIB**
+🟢 Buka     : **18:00 WIB**
+🔴 Tutup    : **00:00 WIB**
 
 📅 Jadwal otomatis:
-Senin – Jumat
+**Senin – Jumat**
 
 🚫 Sabtu & Minggu:
-Tidak ada jadwal otomatis.
+**Tidak ada jadwal buka otomatis.**
 """,
         parse_mode="Markdown"
     )
 
 
 # =========================================================
-# /ID
+# COMMAND /ID
 # =========================================================
 
 @dp.message(Command("id"))
 async def command_id(message: Message):
 
+    user_id = (
+        message.from_user.id
+        if message.from_user
+        else "Unknown"
+    )
+
     await message.answer(
-        f"🆔 **Chat ID:** `{message.chat.id}`\n"
-        f"👤 **User ID:** `{message.from_user.id}`",
+        f"""🆔 **INFORMASI**
+
+💬 Chat ID:
+`{message.chat.id}`
+
+👤 User ID:
+`{user_id}`
+""",
         parse_mode="Markdown"
     )
 
 
 # =========================================================
-# SCHEDULE
+# SCHEDULER
 # =========================================================
 
 def setup_scheduler():
 
-    # -----------------------------------------------------
+    # =====================================================
     # 17:55 WIB
-    # REMINDER 5 MENIT SEBELUM BUKA
+    # REMINDER
     # SENIN - JUMAT
-    # -----------------------------------------------------
+    # =====================================================
 
     scheduler.add_job(
         opening_reminder,
@@ -339,11 +485,11 @@ def setup_scheduler():
         replace_existing=True
     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # 18:00 WIB
-    # BUKA DISKUSI
+    # OPEN
     # SENIN - JUMAT
-    # -----------------------------------------------------
+    # =====================================================
 
     scheduler.add_job(
         open_discussion,
@@ -357,19 +503,22 @@ def setup_scheduler():
         replace_existing=True
     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # 00:00 WIB
-    # TUTUP DISKUSI
+    # CLOSE
     #
-    # PENTING:
-    # 00:00 hari berikutnya.
+    # Selasa - Sabtu
     #
-    # Contoh:
-    # Senin 18:00 buka
+    # Karena sesi malam:
+    #
+    # Senin 18:00
+    # ↓
     # Selasa 00:00 tutup
     #
-    # Jadi sesi Senin malam ditutup tepat tengah malam.
-    # -----------------------------------------------------
+    # Jumat 18:00
+    # ↓
+    # Sabtu 00:00 tutup
+    # =====================================================
 
     scheduler.add_job(
         close_discussion,
@@ -383,50 +532,132 @@ def setup_scheduler():
         replace_existing=True
     )
 
-    logger.info("📅 Scheduler berhasil dibuat")
-    logger.info("🟡 Reminder : Senin-Jumat 17:55 WIB")
-    logger.info("🟢 Open     : Senin-Jumat 18:00 WIB")
-    logger.info("🔴 Close    : Selasa-Sabtu 00:00 WIB")
+    logger.info(
+        "📅 Scheduler berhasil dibuat"
+    )
+
+    logger.info(
+        "🟡 Reminder : Senin-Jumat 17:55 WIB"
+    )
+
+    logger.info(
+        "🟢 Open     : Senin-Jumat 18:00 WIB"
+    )
+
+    logger.info(
+        "🔴 Close    : Selasa-Sabtu 00:00 WIB"
+    )
 
 
 # =========================================================
-# STARTUP
+# MAIN
 # =========================================================
 
 async def main():
 
+    # =====================================================
+    # VALIDASI TOKEN
+    # =====================================================
+
     if not BOT_TOKEN:
+
         raise RuntimeError(
-            "BOT_TOKEN belum diatur di Environment Variables."
+            "BOT_TOKEN belum diatur di Railway Variables."
         )
+
+    # =====================================================
+    # VALIDASI ADMIN
+    # =====================================================
 
     if not ADMIN_IDS:
+
         raise RuntimeError(
-            "ADMIN_IDS belum diatur di Environment Variables."
+            "ADMIN_IDS belum diatur di Railway Variables."
         )
 
-    logger.info("==========================================")
-    logger.info("🤖 GROUP SCHEDULER BOT STARTING...")
-    logger.info("==========================================")
+    logger.info(
+        "=========================================="
+    )
 
-    logger.info(f"GROUP_ID : {GROUP_ID}")
-    logger.info(f"TIMEZONE : {TIMEZONE}")
-    logger.info(f"ADMIN_IDS: {ADMIN_IDS}")
+    logger.info(
+        "🤖 GROUP SCHEDULER BOT STARTING..."
+    )
 
-    # Buat scheduler
+    logger.info(
+        "=========================================="
+    )
+
+    logger.info(
+        "GROUP_ID : %s",
+        GROUP_ID
+    )
+
+    logger.info(
+        "TIMEZONE : Asia/Jakarta"
+    )
+
+    logger.info(
+        "ADMIN_IDS: %s",
+        ADMIN_IDS
+    )
+
+    # =====================================================
+    # SETUP SCHEDULER
+    # =====================================================
+
     setup_scheduler()
 
-    # Jalankan scheduler
+    # =====================================================
+    # START SCHEDULER
+    # =====================================================
+
     scheduler.start()
 
-    logger.info("✅ Scheduler aktif")
-    logger.info("🚀 Bot polling dimulai...")
+    logger.info(
+        "✅ Scheduler aktif"
+    )
+
+    # =====================================================
+    # SINKRONISASI STATUS GRUP
+    #
+    # INI YANG DIPERBAIKI.
+    #
+    # Kalau bot restart jam 17:31:
+    # → otomatis CLOSE
+    #
+    # Kalau bot restart jam 19:00:
+    # → otomatis OPEN
+    #
+    # Kalau bot restart hari Minggu:
+    # → otomatis CLOSE
+    # =====================================================
+
+    await sync_group_status()
+
+    logger.info(
+        "✅ Status grup berhasil disinkronkan"
+    )
+
+    # =====================================================
+    # START POLLING
+    # =====================================================
+
+    logger.info(
+        "🚀 Bot polling dimulai..."
+    )
 
     try:
+
         await dp.start_polling(bot)
 
     finally:
+
+        logger.info(
+            "🛑 Bot shutting down..."
+        )
+
         scheduler.shutdown()
+
         await bot.session.close()
 
 
@@ -435,4 +666,5 @@ async def main():
 # =========================================================
 
 if __name__ == "__main__":
+
     asyncio.run(main())
